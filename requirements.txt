@@ -1,0 +1,49 @@
+# CriticalAlert AI Requirements
+# Core dependencies for real-time emergency radiology alert system
+
+# Pathway - Core data processing framework
+pathway[all]>=0.13.0
+
+# LandingAI - Document parsing and extraction (CORRECT LIBRARY)
+agentic-doc>=0.2.4
+
+# AI & Machine Learning
+openai>=1.0.0
+pydantic>=2.0.0
+
+# Document processing
+PyPDF2>=3.0.0
+python-dotenv>=1.0.0
+
+# MCP Server support
+fastmcp>=0.1.0
+
+# Web framework (for dashboards)
+streamlit>=1.28.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Notification services
+twilio>=8.0.0
+requests>=2.31.0
+
+# Data handling
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Logging and monitoring
+loguru>=0.7.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.11.0
+
+# Development
+black>=23.0.0
+ruff>=0.1.0
+
+# Optional: For advanced features
+# firebase-admin>=6.2.0
+# google-cloud-storage>=2.10.0
+# boto3>=1.29.0

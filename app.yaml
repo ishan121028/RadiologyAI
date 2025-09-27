@@ -1,0 +1,62 @@
+# CriticalAlert AI Configuration
+# Similar to demo-question-answering/app.yaml but specialized for radiology reports
+
+# Data sources - incoming radiology report PDFs  
+$sources:
+  # Process files immediately (batch mode) - shows debug output every run
+  - !pw.io.fs.read
+    path: data/incoming
+    format: binary
+    with_metadata: true
+    mode: streaming
+
+# LLM for alert generation and medical recommendations
+$llm: !pw.xpacks.llm.llms.LiteLLMChat
+  model: "gemini/gemini-2.5-flash-preview-04-17"
+  api_key: $GEMINI_API_KEY
+  retry_strategy: !pw.udfs.ExponentialBackoffRetryStrategy
+    max_retries: 6
+  cache_strategy: !pw.udfs.DefaultCache {}
+  temperature: 0
+  capacity: 8
+
+# Text splitter for medical documents (larger chunks preserve medical context)
+# Text splitter for medical documents (larger chunks preserve medical context)
+$splitter: !pw.xpacks.llm.splitters.TokenCountSplitter
+  max_tokens: 800
+  min_tokens: 200
+
+# Document store for radiology reports
+$document_store: !src.parsers.landingai_parser.RadiologyDocumentStore
+  data_sources: $sources
+  splitter: $splitter
+  cache_strategy: !pw.udfs.DefaultCache {}
+
+# Critical Alert Question Answerer for streaming mode
+critical_alert_answerer: !src.intelligence.critical_alert_answerer.CriticalAlertQuestionAnswerer
+  llm: $llm
+  document_store: $document_store
+  # You can set alert thresholds
+  # red_alert_threshold: 0.9
+  # orange_alert_threshold: 0.7
+  # Custom prompt for medical recommendations
+  # prompt_template: "Based on these radiology findings: {context}, provide immediate medical recommendations for: {query}"
+
+# Server configuration
+host: "0.0.0.0"
+port: 49001
+
+# Processing configuration (commented out for simple App class)
+# max_processing_time: 30
+# enable_real_time_alerts: true
+# alert_escalation_enabled: true
+
+# Cache configuration - activate on-disk caching for UDFs
+with_cache: true
+
+# Error handling - continue processing even if some documents fail
+terminate_on_error: false
+
+# Cache backend for persistence (commented out for simple App class)
+# cache_backend: !pw.persistence.Backend.filesystem
+#   path: "data/cache"

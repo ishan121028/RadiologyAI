@@ -1,0 +1,135 @@
+# CriticalAlert AI Configuration
+# Similar to demo-question-answering/app.yaml but for radiology reports
+
+# Data sources - incoming radiology reports
+$sources:
+  # Filesystem source for incoming PDFs
+  - !pw.io.fs.read
+    path: data/incoming
+    format: binary
+    with_metadata: true
+    mode: streaming  # Real-time monitoring
+
+# LandingAI Parser for radiology reports  
+$landingai_parser: !src.parsers.landingai_parser.LandingAIRadiologyParser
+  api_key: $LANDINGAI_API_KEY
+  cache_strategy: !pw.udfs.DefaultCache {}
+  confidence_threshold: 0.7
+  async_mode: "fully_async"
+  extraction_schema:
+    patient_id: "str"
+    study_date: "str"
+    study_type: "str"
+    clinical_history: "str"
+    technique: "str"
+    findings: "str"
+    impression: "str"
+    critical_findings: "list"
+    urgent_conditions: "list"
+    anatomical_abnormalities: "list"
+    radiologist: "str"
+
+# LLM for alert generation and recommendations
+$llm: !pw.xpacks.llm.llms.OpenAIChat
+  model: "gpt-4o-mini"
+  retry_strategy: !pw.udfs.ExponentialBackoffRetryStrategy
+    max_retries: 6
+  cache_strategy: !pw.udfs.DefaultCache {}
+  temperature: 0
+  capacity: 8
+
+# Embedder for medical text (if needed for similarity search)
+$medical_embedder: !pw.xpacks.llm.embedders.OpenAIEmbedder
+  model: "text-embedding-3-small"
+  cache_strategy: !pw.udfs.DefaultCache {}
+
+# Text splitter for medical documents (larger chunks for medical context)
+$medical_splitter: !pw.xpacks.llm.splitters.TokenCountSplitter
+  max_tokens: 800
+  min_tokens: 200
+
+# Retriever factory for medical knowledge base (if needed)
+$retriever_factory: !pw.stdlib.indexing.UsearchKnnFactory
+  reserved_space: 5000
+  embedder: $medical_embedder
+  metric: !pw.stdlib.indexing.USearchMetricKind.COS
+
+# Radiology Document Store
+$radiology_document_store: !src.parsers.landingai_parser.RadiologyDocumentStore
+  data_sources: $sources
+  landingai_api_key: $LANDINGAI_API_KEY
+  retriever_factory: $retriever_factory
+  splitter: $medical_splitter
+  cache_strategy: !pw.udfs.DefaultCache {}
+
+# Critical Alert Configuration
+critical_alert_config:
+  alert_levels:
+    red:
+      conditions: ["pulmonary embolism", "aortic dissection", "hemorrhage", "intracranial bleed", "tension pneumothorax", "bowel obstruction", "aortic aneurysm rupture", "acute stroke", "myocardial infarction", "cardiac tamponade"]
+      escalation_time_minutes: 5
+      notification_channels: ["websocket", "push", "sms", "paging"]
+    orange:
+      conditions: ["pneumonia", "fracture", "mass", "pneumothorax", "appendicitis", "kidney stones", "gallbladder inflammation", "abscess", "blood clot"]
+      escalation_time_minutes: 15
+      notification_channels: ["websocket", "push", "sms"]
+    yellow:
+      conditions: ["nodule", "cyst", "inflammation", "chronic changes", "arthritis", "minor fracture", "sinus infection"]
+      escalation_time_minutes: 60
+      notification_channels: ["websocket"]
+
+# Processing pipeline configuration
+processing_config:
+  max_processing_time_seconds: 30
+  retry_attempts: 3
+  fallback_to_basic_extraction: true
+  enable_duplicate_detection: true
+  
+# Real-time monitoring configuration
+monitoring_config:
+  enable_real_time_stats: true
+  stats_update_interval_seconds: 5
+  performance_metrics_enabled: true
+  alert_response_tracking: true
+
+# Notification service configuration
+notification_config:
+  websocket:
+    enabled: true
+    port: 8001
+  push_notifications:
+    enabled: true
+    firebase_key: $FIREBASE_SERVER_KEY
+  sms:
+    enabled: true
+    provider: "twilio"
+    account_sid: $TWILIO_ACCOUNT_SID
+    auth_token: $TWILIO_AUTH_TOKEN
+  paging:
+    enabled: true
+    hl7_endpoint: $HOSPITAL_PAGING_ENDPOINT
+
+# MCP Server configuration
+mcp_server_config:
+  name: "CriticalAlert AI"
+  transport: "streamable-http"
+  host: "0.0.0.0"
+  port: 8127
+  
+# Caching and persistence
+cache_config:
+  with_cache: true
+  cache_backend: !pw.persistence.Backend.filesystem
+    path: "data/cache"
+    
+# Error handling
+error_handling:
+  terminate_on_error: false
+  failed_files_directory: "data/failed"
+  max_retry_attempts: 3
+  
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s %(name)s %(levelname)s %(message)s"
+  file: "logs/critical_alert.log"
