@@ -1,0 +1,30 @@
+{
+    "mcpServers": {
+      "Adobe Photoshop MCP Server": {
+        "command": "env",
+        "args": [
+          "PATH=/Library/Frameworks/Python.framework/Versions/3.13/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH",
+          "uv",
+          "run",
+          "--with",
+          "fonttools",
+          "--with",
+          "mcp",
+          "--with",
+          "mcp[cli]",
+          "--with",
+          "python-socketio",
+          "--with",
+          "requests",
+          "--with",
+          "websocket-client",
+          "mcp",
+          "run",
+          "/Users/iupadhyay/adobe/adobe-mcp/adb-mcp/mcp/ps-mcp.py"
+        ]
+      },
+      "critical-alert-ai": {
+        "url": "http://localhost:8123/mcp/"
+      }
+    }
+  }
