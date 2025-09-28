@@ -545,3 +545,4 @@ def check_escalation_needed(alert_level: str, timestamp: str) -> bool:
     except Exception as e:
         logger.error(f"Error checking escalation: {e}")
         return False
+

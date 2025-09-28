@@ -66,3 +66,4 @@ __title__ = "CriticalAlert AI"
 __description__ = "Real-time emergency radiology alert system"
 __author__ = "CriticalAlert AI Team"
 __license__ = "MIT"
+

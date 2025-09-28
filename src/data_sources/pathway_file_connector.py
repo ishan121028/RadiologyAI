@@ -453,3 +453,4 @@ class PathwayStreamingService:
         """Stop the monitoring service"""
         self.is_running = False
         logger.info("Stopped Pathway streaming pipeline")
+

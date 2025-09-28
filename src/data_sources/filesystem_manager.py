@@ -356,3 +356,4 @@ class FilesystemManager:
             validation_result["errors"].append(f"Validation error: {str(e)}")
         
         return validation_result
+

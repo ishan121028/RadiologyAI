@@ -418,3 +418,4 @@ Your CriticalAlert AI system is now set up and ready for **real-time emergency r
 4. Scale for hospital deployment
 
 Need help? Check the logs in `logs/` or run examples for debugging! 🚨
+

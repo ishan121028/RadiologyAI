@@ -13,10 +13,10 @@ import os
 import pathway as pw
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, InstanceOf
+from pathway.xpacks.llm.servers import QASummaryRestServer
 
-# Import our custom components
-from src.intelligence.critical_alert_answerer import CriticalAlertQuestionAnswerer
-# from src.app import CriticalAlertApp
+# Import Pathway's built-in RAG components
+from pathway.xpacks.llm.question_answering import BaseRAGQuestionAnswerer
 
 # To use advanced features with Pathway Scale, get your free license key from
 # https://pathway.com/features and paste it below.
@@ -30,10 +30,6 @@ logging.basicConfig(
 )
 
 load_dotenv()
-
-print(os.getenv("LANDINGAI_API_KEY"))
-print(os.getenv("GEMINI_API_KEY"))
-print(os.getenv("PATHWAY_LICENSE_KEY"))
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -54,8 +50,8 @@ class App(BaseModel):
     The YAML instantiates the critical_alert_answerer which contains the RadiologyDocumentStore
     """
     
-    # This gets instantiated from YAML (just like question_answerer in demo-question-answering)
-    critical_alert_answerer: InstanceOf[CriticalAlertQuestionAnswerer]
+    # Use Pathway's built-in BaseRAGQuestionAnswerer
+    question_answerer: InstanceOf[BaseRAGQuestionAnswerer]
     
     # Server configuration
     host: str = "0.0.0.0"
@@ -74,125 +70,22 @@ class App(BaseModel):
         Similar to QASummaryRestServer.run() in existing examples
         """
         
-        # Get the real-time critical alerts stream from the answerer
-        # This internally uses the RadiologyDocumentStore that was instantiated from YAML
-        critical_alerts = self.critical_alert_answerer.get_critical_alerts_stream()
+        # Use Pathway's built-in QASummaryRestServer - exactly like demo-question-answering
+        server = QASummaryRestServer(self.host, self.port, self.question_answerer)
         
-        # Filter for immediate action alerts (RED level) - simplified filtering
-        immediate_alerts = critical_alerts.filter(pw.this.alert_level == "RED")
-
-        # Get processing statistics
-        stats = self.critical_alert_answerer.get_processing_statistics()
-
-        if self.debug_update_stream:
-            logging.info("PW_DEBUG_UPDATE_STREAM enabled - printing update stream and exiting")
-            pw.debug.compute_and_print_update_stream(
-                critical_alerts,
-                immediate_alerts,
-                stats,
-                include_id=True,
-                short_pointers=True,
-                terminate_on_error=self.terminate_on_error,
-            )
-            return
-
-        # Set up real-time monitoring and outputs
-        # Debug all critical alerts (simplified version)
-        critical_alerts.debug("critical_alerts")
+        logging.info("🚀 CriticalAlert AI Server Starting...")
+        logging.info(f"📡 Server: http://{self.host}:{self.port}")
+        logging.info("📋 Standard Pathway RAG endpoints:")
+        logging.info("  POST /v1/pw_ai_answer - Medical query answering")
+        logging.info("  POST /v1/pw_ai_retrieve - Document retrieval")
+        logging.info("  POST /v1/statistics - Processing statistics")
+        logging.info("🔄 Using LandingAI parser for medical document processing...")
         
-        # Debug immediate action alerts
-        immediate_alerts.debug("immediate_alerts")
-        
-        # Debug processing statistics
-        stats.debug("processing_stats")
-        
-        # Create a single webserver instance for all endpoints
-        webserver = pw.io.http.PathwayWebserver(host=self.host, port=self.port)
-        
-        # Set up REST endpoint for querying critical alerts
-        class QuerySchema(pw.Schema):
-            query: str
-        
-        query_table, response_writer = pw.io.http.rest_connector(
-            webserver=webserver,
-            route="/api/query",
-            schema=QuerySchema,
-            autocommit_duration_ms=50,
-            delete_completed_queries=True,
-        )
-        
-        # Process queries using the actual critical alert answerer
-        query_responses = query_table.select(
-            query_id=pw.this.id,
-            result=pw.apply(
-                self.critical_alert_answerer.answer_single_query,
-                pw.this.query
-            )
-        )
-        
-        response_writer(query_responses)
-        
-        # Add health check endpoint
-        class HealthSchema(pw.Schema):
-            check: str
-        
-        health_table, health_writer = pw.io.http.rest_connector(
-            webserver=webserver,
-            route="/health",
-            schema=HealthSchema,
-            methods=["GET", "POST"],
-            autocommit_duration_ms=50,
-            delete_completed_queries=True,
-        )
-        
-        health_responses = health_table.select(
-            query_id=pw.this.id,
-            result={
-                "status": "healthy",
-                "service": "CriticalAlert AI",
-                "streaming": "active",
-                "endpoints": ["/api/query", "/api/search", "/health"]
-            }
-        )
-        
-        health_writer(health_responses)
-        
-        # Add RAG search endpoint for document retrieval
-        class SearchSchema(pw.Schema):
-            query: str
-            limit: int
-        
-        search_table, search_writer = pw.io.http.rest_connector(
-            webserver=webserver,
-            route="/api/search",
-            schema=SearchSchema,
-            autocommit_duration_ms=50,
-            delete_completed_queries=True,
-        )
-        
-        # Process RAG searches using document store retrieval
-        search_responses = search_table.select(
-            query_id=pw.this.id,
-            result=pw.apply(
-                self.critical_alert_answerer.search_documents,
-                pw.this.query,
-                pw.this.limit
-            )
-        )
-        
-        search_writer(search_responses)
-        
-        logging.info(f"🚀 CriticalAlert AI started on http://{self.host}:{self.port}")
-        logging.info("📡 Available REST endpoints:")
-        logging.info("  POST /api/query - Query critical alerts with RAG")
-        logging.info("  POST /api/search - RAG-based document search")
-        logging.info("  GET  /health - Health check")
-        logging.info("🔄 Monitoring for critical radiology alerts...")
-        
-        # Run Pathway computation (same as existing examples)
-        pw.run(
-            monitoring_level=pw.MonitoringLevel.ALL,
+        # Run with standard Pathway server (should eliminate crashes)
+        server.run(
+            with_cache=self.with_cache,
             terminate_on_error=self.terminate_on_error,
+            cache_backend=pw.persistence.Backend.filesystem("Cache"),
         )
 
     @classmethod

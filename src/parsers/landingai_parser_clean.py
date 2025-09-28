@@ -33,7 +33,6 @@ except AttributeError:
     TextSplitter = Any
 
 # --- Pydantic Models for Medical Extraction ---
-# Note: Using batch_async mode instead of fully_async resolves Pydantic compatibility issues
 
 class RadiologyExtractionModel(BaseModel):
     """Pydantic model for structured radiology report extraction using LandingAI"""
@@ -46,18 +45,16 @@ class RadiologyExtractionModel(BaseModel):
     critical_findings: Optional[str] = Field(default=None, description="Critical or urgent findings that require immediate attention")
 
 
-
 class LandingAIRadiologyParser(pw.UDF):
     """
-    Parse radiology reports using LandingAI agentic-doc library.
+    Pathway UDF for parsing radiology reports using LandingAI agentic-doc library.
     
-    This class follows the same pattern as DoclingParser, providing
-    structured medical data extraction from PDF radiology reports.
+    This parser extracts structured medical data from PDF radiology reports using
+    LandingAI's document analysis API with custom Pydantic models.
     
     Args:
-        api_key: LandingAI API key for document parsing
-        extraction_model: Pydantic model for structured data extraction
-        cache_strategy: Defines the caching mechanism
+        api_key: LandingAI API key for document analysis
+        cache_strategy: Caching strategy for UDF results (disabled to avoid Pydantic serialization issues)
         confidence_threshold: Minimum confidence for extractions
         chunk: Whether to chunk parsed document into smaller parts
         async_mode: Processing mode - "batch_async" or "fully_async"
@@ -79,9 +76,8 @@ class LandingAIRadiologyParser(pw.UDF):
         self.api_key = api_key
         self.confidence_threshold = confidence_threshold
         self.chunk = chunk
-        # Keep the extraction model for structured parsing
         # Use None to avoid UDF serialization issues with class references
-        self.extraction_model = RadiologyExtractionModel
+        self.extraction_model = None
 
         # Verify LandingAI library is available
         if not AGENTIC_DOC_AVAILABLE:
@@ -114,7 +110,7 @@ class LandingAIRadiologyParser(pw.UDF):
             # Define model locally to avoid UDF serialization issues
             logger.info("🔄 Using LandingAI parsing with structured medical extraction (sync mode)")
             
-            # Define extraction model locally within the method
+            # Define extraction model locally within the method to avoid Pathway UDF context issues
             class LocalRadiologyExtractionModel(BaseModel):
                 patient_id: Optional[str] = Field(default=None, description="Patient identification number or ID")
                 study_type: Optional[str] = Field(default=None, description="Type of radiological study (e.g., CT, MRI, X-ray, Ultrasound)")
@@ -144,47 +140,32 @@ class LandingAIRadiologyParser(pw.UDF):
                 
                 if hasattr(parsed_doc, 'extraction') and parsed_doc.extraction:
                     extraction_success = True
-                    
-                    # Debug: Log the type of extraction object (avoid logging the object itself to prevent __private_attributes__ error)
-                    logger.info(f"🔍 Extraction object type: {type(parsed_doc.extraction)}")
-                    
-                    try:
-                        # Always use getattr() method to avoid model_dump() Pydantic v2 issues
-                        logger.info("📝 Using safe getattr() method for Pydantic model")
-                        
-                        # Handle Pydantic model instance (including generic BaseModel)
-                        # Use safe attribute access to avoid triggering Pydantic v2 issues
-                        structured_data = {}
-                        
-                        # List of expected fields from our RadiologyExtractionModel
-                        expected_fields = [
-                            'patient_id', 'study_type', 'study_date', 'clinical_history',
-                            'technique', 'findings', 'impression', 'radiologist',
-                            'critical_findings', 'urgent_conditions', 'critical_conditions',
-                            'anatomical_abnormalities', 'report_date'
-                        ]
-                        
-                        # Safely extract fields that exist
-                        for field in expected_fields:
-                            try:
-                                value = getattr(parsed_doc.extraction, field, '')
-                                structured_data[field] = str(value) if value is not None else ''
-                            except Exception as field_error:
-                                logger.warning(f"⚠️ Could not extract field '{field}': {field_error}")
-                                structured_data[field] = ''
-                        
-                        logger.info(f"✅ Extracted {len([v for v in structured_data.values() if v])} non-empty fields")
-                            
-                    except Exception as extraction_processing_error:
-                        structured_data = {}
-                        extraction_success = False
-                        extraction_error = str(extraction_processing_error)
-
+                    if hasattr(parsed_doc.extraction, 'model_dump'):
+                        structured_data = parsed_doc.extraction.model_dump()
+                    elif isinstance(parsed_doc.extraction, dict):
+                        structured_data = parsed_doc.extraction
+                    else:
+                        # Handle Pydantic model instance
+                        structured_data = {
+                            "patient_id": getattr(parsed_doc.extraction, 'patient_id', ''),
+                            "study_type": getattr(parsed_doc.extraction, 'study_type', ''),
+                            "study_date": getattr(parsed_doc.extraction, 'study_date', ''),
+                            "clinical_history": getattr(parsed_doc.extraction, 'clinical_history', ''),
+                            "technique": getattr(parsed_doc.extraction, 'technique', ''),
+                            "findings": getattr(parsed_doc.extraction, 'findings', ''),
+                            "impression": getattr(parsed_doc.extraction, 'impression', ''),
+                            "radiologist": getattr(parsed_doc.extraction, 'radiologist', ''),
+                            "critical_findings": getattr(parsed_doc.extraction, 'critical_findings', ''),
+                            "urgent_conditions": getattr(parsed_doc.extraction, 'urgent_conditions', ''),
+                            "critical_conditions": getattr(parsed_doc.extraction, 'critical_conditions', ''),
+                            "anatomical_abnormalities": getattr(parsed_doc.extraction, 'anatomical_abnormalities', ''),
+                            "report_date": getattr(parsed_doc.extraction, 'report_date', ''),
+                        }
                 elif hasattr(parsed_doc, 'extraction_error') and parsed_doc.extraction_error:
                     extraction_error = parsed_doc.extraction_error
                     logger.warning(f"LandingAI structured parsing failed: {extraction_error}")
                 
-                
+                # Combine metadata from parsed_doc and structured_data
                 metadata = {
                     "source": "landingai",
                     "confidence": parsed_doc.confidence if hasattr(parsed_doc, 'confidence') else 0.0,
@@ -323,9 +304,12 @@ class RadiologyDocumentStore(DocumentStore):
                 )
             parser = LandingAIRadiologyParser(
                 api_key=self.landingai_api_key,
-                cache_strategy=cache_strategy
+                cache_strategy=cache_strategy,
+                async_mode="batch_async",
+                capacity=2
             )
         
+        # Initialize parent DocumentStore
         super().__init__(
             docs=docs,
             retriever_factory=retriever_factory,

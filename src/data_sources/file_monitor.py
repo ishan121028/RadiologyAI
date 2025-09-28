@@ -419,3 +419,4 @@ startxref
         
         logger.info(f"Created {count} simulated radiology report files")
         return simulated_files
+
