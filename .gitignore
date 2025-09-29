@@ -8,3 +8,5 @@ __pycache__/
 .idea/
 .cursorrules
 .cursorignore
+Blog.md
+Cache/

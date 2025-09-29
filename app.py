@@ -31,10 +31,10 @@ DEBUG_UPDATE_STREAM = _env_flag("PW_DEBUG_UPDATE_STREAM", False)
 
 class App(BaseModel):
     """
-    CriticalAlert AI Application
+    Radiology AI Application
     
     Follows the exact same pattern as demo-question-answering/app.py
-    The YAML instantiates the critical_alert_answerer which contains the RadiologyDocumentStore
+    The YAML instantiates the question_answerer which contains the RadiologyDocumentStore
     """
     
     question_answerer: InstanceOf[BaseRAGQuestionAnswerer]
@@ -50,7 +50,7 @@ class App(BaseModel):
     
     def run(self) -> None:
         """
-        Run the CriticalAlert AI application
+        Run the Radiology AI application
         
         This is where the actual Pathway computation graph gets set up
         Similar to QASummaryRestServer.run() in existing examples

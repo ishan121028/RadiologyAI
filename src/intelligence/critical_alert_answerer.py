@@ -3,14 +3,9 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, InstanceOf
 import logging
 from pathway.xpacks.llm.question_answering import BaseRAGQuestionAnswerer
-from pathway.xpacks.llm.vector_store import VectorStoreServer
-from pathway.xpacks.llm import embedders, splitters
-
-logger = logging.getLogger(__name__)
-
-# Correct import path for the DocumentStore
 from src.store.RadiologyDocumentStore import RadiologyDocumentStore
 
+logger = logging.getLogger(__name__)
 
 class RadiologyQuestionAnswerer(BaseRAGQuestionAnswerer):
     """
@@ -42,10 +37,26 @@ class RadiologyQuestionAnswerer(BaseRAGQuestionAnswerer):
             **kwargs,
         )
 
-        # Keep a typed handle to the document store when available
         self.indexer: RadiologyDocumentStore | object = indexer
 
 
-    # Patient tools are now only available directly through MCP from DocumentStore
-    # No delegation needed - this avoids double delegation issues
+    class PatientSearchSchema(pw.Schema):
+        patient_id: str = pw.column_definition(dtype=str, default_value="")
+
+    class PatientQuerySchema(pw.Schema):
+        patient_name: str = pw.column_definition(dtype=str, default_value="")
+
+    @pw.table_transformer
+    def search_patient_by_id(self, request_table: pw.Table[PatientSearchSchema]) -> pw.Table:
+        """
+        Search for patient by ID - delegates to DocumentStore implementation.
+        """
+        return self.indexer.search_patient_by_id(request_table)
+
+    @pw.table_transformer
+    def query_patient_extraction(self, request_table: pw.Table[PatientQuerySchema]) -> pw.Table:
+        """
+        Query patient extraction results - delegates to DocumentStore implementation.
+        """
+        return self.indexer.query_patient_extraction(request_table)
 

@@ -45,53 +45,13 @@ class RadiologyDocumentStore(DocumentStore):
         
         self.landingai_api_key = landingai_api_key or os.getenv("LANDINGAI_API_KEY")
         
-        # Parser will be provided from YAML configuration
-        # No need to create default parser here
         
-        # Initialize parent DocumentStore
         super().__init__(
             docs=docs,
             retriever_factory=retriever_factory,
             splitter=splitter,
             parser=parser,
             **kwargs
-        )
-        # Skip complex patient table building to avoid hanging - use simple live data approach
-        logger.info("📊 Using simple live data approach to avoid hanging")
-        self.patients_table = None 
-    
-    def build_patient_tables(self) -> None:
-        """Create a per-patient table from parsed documents safely normalizing metadata."""
-        # Guard: parsed_docs may not be ready very early, but in our pipeline it's set in super().__init__
-        docs = self.parsed_docs
-        docs_norm = docs.with_columns(
-            patient_id_json=pw.this.metadata.get("patient_id"),
-            study_type_json=pw.this.metadata.get("study_type"),
-            findings_json=pw.this.metadata.get("findings"),
-            impression_json=pw.this.metadata.get("impression"),
-            critical_findings_json=pw.this.metadata.get("critical_findings"),
-            confidence_json=pw.this.metadata.get("confidence"),
-            file_id_json=pw.this.metadata.get("_file_id")
-        ).with_columns(
-            patient_id=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.patient_id_json),
-            study_type=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.study_type_json),
-            findings=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.findings_json),
-            impression=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.impression_json),
-            critical_findings=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.critical_findings_json),
-            confidence=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.confidence_json),
-            file_id=pw.apply(lambda v: v if isinstance(v, str) else ("" if v is None else str(v)), pw.this.file_id_json)
-        )
-        # Aggregate by patient_id
-        self.patients_table = (
-            docs_norm.groupby(docs_norm.patient_id).reduce(
-                patient_id=pw.this.patient_id,
-                latest_study=pw.reducers.any(pw.this.study_type),
-                latest_findings=pw.reducers.any(pw.this.findings),
-                latest_impression=pw.reducers.any(pw.this.impression),
-                latest_critical_findings=pw.reducers.any(pw.this.critical_findings),
-                any_confidence=pw.reducers.any(pw.this.confidence),
-                doc_count=pw.reducers.count()
-            )
         )
     
     class PatientQuerySchema(pw.Schema):
@@ -115,19 +75,14 @@ class RadiologyDocumentStore(DocumentStore):
         """
         MCP Tool: Simple extraction query using parsed_docs directly (no complex aggregations).
         """
-        logger.info("🔍 query_patient_extraction: Using simple live extraction from parsed_docs")
-        
-        # Get live data from parsed_docs (same pattern as inputs_query)
         all_docs = self.parsed_docs.reduce(
             metadatas=pw.reducers.tuple(pw.this.metadata),
             texts=pw.reducers.tuple(pw.this.text),
             doc_count=pw.reducers.count(),
         )
         
-        # Format extraction results with filtering capability
         @pw.udf
         def format_filtered_extraction_result(patient_query: str, metadatas: list, texts: list, doc_count: int) -> pw.Json:
-            # Extract live data from actual documents with optional filtering
             all_results = []
             filtered_results = []
             
@@ -159,7 +114,6 @@ class RadiologyDocumentStore(DocumentStore):
                         # Skip problematic documents
                         continue
             
-            # Use filtered results if we have a specific query, otherwise show all
             results_to_show = filtered_results if (patient_query and patient_query.lower() not in ["test patient", "radiology patient", "", "all"]) else all_results
             
             response = {
@@ -179,7 +133,6 @@ class RadiologyDocumentStore(DocumentStore):
             }
             return pw.Json(response)
         
-        # Simple join with document data
         result = request_table.join_left(all_docs, id=request_table.id).select(
             result=format_filtered_extraction_result(
                 request_table.patient_name,
@@ -189,7 +142,6 @@ class RadiologyDocumentStore(DocumentStore):
             )
         )
         
-        logger.info("✅ query_patient_extraction: Returning simple live extraction data")
         return result
     
     @pw.table_transformer
@@ -199,17 +151,15 @@ class RadiologyDocumentStore(DocumentStore):
         """
         logger.info("🔍 search_patient_by_id: Filtering by specific patient ID")
         
-        # Get all documents with their metadata for filtering
         all_docs = self.parsed_docs.reduce(
             metadatas=pw.reducers.tuple(pw.this.metadata),
             texts=pw.reducers.tuple(pw.this.text),
             total_docs=pw.reducers.count(),
         )
         
-        # Filter and format results for specific patient ID
         @pw.udf
         def search_by_patient_id(requested_patient_id: str, metadatas: list, texts: list, total_docs: int) -> pw.Json:
-            # Find documents matching the requested patient ID
+
             matching_docs = []
             for i, (metadata, text) in enumerate(zip(metadatas or [], texts or [])):
                 if metadata:
@@ -233,9 +183,7 @@ class RadiologyDocumentStore(DocumentStore):
                     except:
                         continue
             
-            # Build response
             if matching_docs:
-                # Find exact matches first
                 exact_matches = [doc for doc in matching_docs if doc["exact_match"]]
                 if exact_matches:
                     response = {
@@ -266,7 +214,6 @@ class RadiologyDocumentStore(DocumentStore):
             
             return pw.Json(response)
         
-        # Join and filter by patient ID
         result = request_table.join_left(all_docs, id=request_table.id).select(
             result=search_by_patient_id(
                 request_table.patient_id,
@@ -286,12 +233,7 @@ class RadiologyDocumentStore(DocumentStore):
         This overrides the parent DocumentStore.register_mcp to add our custom patient tools
         alongside the standard retrieve_query, statistics_query, and inputs_query tools.
         """
-        
-        # First register the standard DocumentStore tools
         super().register_mcp(server)
-        
-        # Then register our custom patient tools
-        logger.info("🏥 Registering patient analysis tools with MCP server...")
         
         server.tool(
             name="query_patient_extraction",
@@ -304,5 +246,3 @@ class RadiologyDocumentStore(DocumentStore):
             request_handler=self.search_patient_by_id,
             schema=self.PatientSearchSchema,
         )
-        
-        logger.info("✅ Patient analysis tools registered successfully (2 medical tools + 3 standard DocumentStore tools)")

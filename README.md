@@ -1,28 +1,142 @@
-# 🚨 CriticalAlert AI - Real-time Emergency Radiology Alert System
+# Radiology AI
 
-Real-time emergency radiology alert system using **LandingAI parser** with **Pathway's streaming RAG** for life-saving medical document processing.
+Real-time radiology document processing with AI-powered analysis and RAG (Retrieval-Augmented Generation) capabilities.
 
-## 🏗️ **How It Works with app.yaml (Just Like Other Pathway Examples)**
+## Overview
 
-### **📋 Usage Pattern - Exactly Like Existing Apps:**
+This system processes radiology reports in real-time, extracts structured medical data, and provides intelligent query answering with critical finding detection. Built on Pathway's streaming data processing framework with LandingAI for document parsing.
+
+## Key Features
+
+- **Real-time Processing**: Streams incoming radiology reports as they arrive
+- **AI-Powered Parsing**: Uses LandingAI for structured medical data extraction
+- **RAG Query System**: Advanced question answering over medical documents
+- **Medical Intelligence**: Specialized radiology report understanding
+- **REST API**: Complete HTTP endpoints for integration
+- **MCP Server**: Model Context Protocol for external tool access
+- **High Performance**: Pathway-powered streaming architecture
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.9+
+- LandingAI API key
+- Anthropic API key 
+
+You can customize the LLM model in app.yaml please check out pathway.xpacks.llm.llms for more details.
+
+### Installation
 
 ```bash
-# 1. Set up environment variables
-export LANDINGAI_API_KEY="your_key"
-export OPENAI_API_KEY="your_openai_key"
+# 1. Clone the repository
+git clone https://github.com/ishan121028/RadiologyAI.git
+cd RadiologyAI
 
-# 2. Run with default configuration (like demo-question-answering)
-python app.py
+# 2. Create virtual environment
+python -m venv .venv
+source .venv/bin/activate 
 
-# 3. Or run with custom configuration
-python app.py custom_config.yaml
+# 3. Install dependencies
+pip install requirements.txt
+
+# 4. Set up environment variables
+cp .env.example .env
+# Edit .env with your API keys
 ```
 
-### **⚙️ app.yaml Configuration (Following DoclingParser Pattern):**
+### Environment Configuration
+
+Create a `.env` file with:
+
+```bash
+PATHWAY_LICENSE_KEY="pathway-license-key"
+LANDINGAI_API_KEY="your-landing-ai-api-key"
+VISION_AGENT_API_KEY="your-landing-ai-api-key"
+ANTHROPIC_API_KEY="your-anthropic-api-key"
+```
+
+### Running the Application
+
+```bash
+# 1. Create data directories
+mkdir -p data/incoming data/processed
+
+# 2. Start the application
+python app.py
+
+# 3. Add PDF radiology reports to data/incoming/
+# 4. Access the API at http://localhost:49001
+# 5. Access the mcp server at http://localhost:8123/mcp
+```
+
+## 📁 Project Structure
+
+```
+├── app.py                              # Main application entry point
+├── app.yaml                           # Application configuration
+├── src/
+│   ├── __init__.py                    # Package initialization
+│   ├── parsers/
+│   │   ├── __init__.py
+│   │   └── landingai_parser.py        # LandingAI document parser
+│   ├── intelligence/
+│   │   ├── __init__.py
+│   │   └── critical_alert_answerer.py # RAG question answerer
+│   ├── store/
+│   │   └── RadiologyDocumentStore.py  # Document store with MCP tools
+│   └── server/
+│       └── RadiologyServer.py         # REST API server
+├── data/
+│   ├── incoming/                      # Drop PDF files here
+│   └── processed/                     # Processed documents
+└── Cache/                             # Pathway cache directory
+```
+
+## 🔌 API Endpoints
+
+### Standard RAG Endpoints
+
+- **POST** `/v1/retrieve` - Semantic document search
+- **POST** `/v1/statistics` - System statistics
+- **POST** `/v1/pw_list_documents` - List all documents
+- **POST** `/v1/pw_ai_answer` - AI question answering
+- **POST** `/v2/answer` - Enhanced question answering
+
+### Patient-Specific Endpoints
+
+- **POST** `/v1/search_patient_by_id` - Search by patient ID
+- **POST** `/v1/query_patient_extraction` - Query patient extraction data
+
+### Example API Calls
+
+```bash
+# Search for documents
+curl -X POST "http://localhost:49001/v1/retrieve" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "brain tumor", "k": 5}'
+
+# Get system statistics
+curl -X POST "http://localhost:49001/v1/statistics" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Search specific patient
+curl -X POST "http://localhost:49001/v1/search_patient_by_id" \
+  -H "Content-Type: application/json" \
+  -d '{"patient_id": "12345"}'
+
+# Ask AI question
+curl -X POST "http://localhost:49001/v2/answer" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What are the critical findings in recent MRI scans?"}'
+```
+
+## 🔧 Configuration
+
+The application uses `app.yaml` for configuration following Pathway's standard patterns:
 
 ```yaml
-# Just like demo-question-answering/app.yaml but with LandingAI parser
-
 # Data sources
 $sources:
   - !pw.io.fs.read
@@ -31,173 +145,172 @@ $sources:
     with_metadata: true
     mode: streaming
 
-# LandingAI parser (replaces DoclingParser)
+# LandingAI parser
 $parser: !src.parsers.landingai_parser.LandingAIRadiologyParser
   api_key: $LANDINGAI_API_KEY
   cache_strategy: !pw.udfs.DefaultCache {}
-  confidence_threshold: 0.7
 
-# LLM configuration (same as other apps)
-$llm: !pw.xpacks.llm.llms.OpenAIChat
-  model: "gpt-4o-mini"
-  cache_strategy: !pw.udfs.DefaultCache {}
-
-# Document store for radiology reports
-$document_store: !src.parsers.landingai_parser.RadiologyDocumentStore
+# Document processing
+$document_store: !src.store.RadiologyDocumentStore.RadiologyDocumentStore
   data_sources: $sources
-  landingai_api_key: $LANDINGAI_API_KEY
+  parser: $parser
 
-# Critical alert answerer (like question_answerer in other apps)
-critical_alert_answerer: !src.intelligence.critical_alert_answerer.CriticalAlertQuestionAnswerer
+# Question answerer
+question_answerer: !src.intelligence.critical_alert_answerer.RadiologyQuestionAnswerer
   llm: $llm
-  document_store: $document_store
+  indexer: $document_store
 
-# Server config (same as other apps)
+# Server settings
 host: "0.0.0.0"
-port: 8000
-with_cache: true
-terminate_on_error: false
+port: 49001
 ```
 
-### **🔧 Key Components:**
+## 🩺 Medical Data Processing
 
-## **1. LandingAI Parser (Like DoclingParser)**
+### Supported Document Types
+
+- **CT Scans**: Computed Tomography reports
+- **MRI Reports**: Magnetic Resonance Imaging
+- **X-Ray Reports**: Radiographic findings
+- **Ultrasound**: Sonographic reports
+- **Nuclear Medicine**: SPECT, PET scans
+
+### Extracted Medical Fields
+
+- Patient ID and demographics
+- Study type and modality
+- Clinical findings
+- Impressions and diagnoses
+- Critical findings requiring immediate attention
+- Radiologist recommendations
+
+### Critical Finding Detection
+
+The system automatically identifies and prioritizes:
+
+- **RED**: Life-threatening conditions (PE, hemorrhage, pneumothorax)
+- **ORANGE**: Urgent findings requiring prompt attention
+- **YELLOW**: Significant findings needing follow-up
+- **GREEN**: Routine findings
+
+## 🔌 MCP (Model Context Protocol) Integration
+
+The system exposes tools via MCP for external access:
+
 ```python
-# Used in app.yaml exactly like DoclingParser:
-$parser: !src.parsers.landingai_parser.LandingAIRadiologyParser
-  api_key: $LANDINGAI_API_KEY
-  cache_strategy: !pw.udfs.DefaultCache {}
+# Available MCP tools
+- retrieve_query: Document retrieval
+- statistics_query: System statistics  
+- inputs_query: Document listing
+- search_patient_by_id: Patient search
+- query_patient_extraction: Patient data extraction
 ```
 
-**Features:**
-- ✅ **Same Interface**: Works exactly like `pw.xpacks.llm.parsers.DoclingParser`
-- ✅ **Pathway UDF**: Native Pathway integration with caching
-- ✅ **Medical Specialization**: Extracts radiology-specific entities
-- ✅ **Critical Finding Detection**: Built-in medical intelligence
+Access MCP server at: `http://localhost:49001/mcp/`
 
-## **2. RadiologyDocumentStore (Like DocumentStore)**
+## 🛠️ Development
+
+### Adding New Parsers
+
 ```python
-# Used in app.yaml like standard DocumentStore:
-$document_store: !src.parsers.landingai_parser.RadiologyDocumentStore
-  data_sources: $sources
-  landingai_api_key: $LANDINGAI_API_KEY
+# Create new parser in src/parsers/
+class CustomParser(pw.UDF):
+    def __call__(self, contents: bytes, **kwargs) -> dict:
+        # Your parsing logic
+        return parsed_data
 ```
 
-**Features:**
-- ✅ **Real-time Processing**: Streams incoming radiology reports
-- ✅ **Critical Alert Detection**: Automatic medical alert classification
-- ✅ **Processing Statistics**: Real-time performance metrics
+### Extending Medical Intelligence
 
-## **3. CriticalAlertQuestionAnswerer (Like RAGQuestionAnswerer)**
 ```python
-# Used in app.yaml like BaseRAGQuestionAnswerer:
-critical_alert_answerer: !src.intelligence.critical_alert_answerer.CriticalAlertQuestionAnswerer
-  llm: $llm
-  document_store: $document_store
+# Add medical analysis in src/intelligence/
+class CustomMedicalAnalyzer:
+    def analyze_findings(self, text: str) -> dict:
+        # Your medical analysis logic
+        return analysis_results
 ```
 
-**Features:**
-- ✅ **Medical Intelligence**: Specialized medical question answering
-- ✅ **Alert Classification**: RED/ORANGE/YELLOW/GREEN levels
-- ✅ **Treatment Recommendations**: Evidence-based medical guidance
+### Custom MCP Tools
 
-### **🚀 Quick Start:**
+```python
+# Add MCP tools in src/store/RadiologyDocumentStore.py
+@pw.table_transformer
+def my_custom_tool(self, request_table: pw.Table) -> pw.Table:
+    # Your custom tool logic
+    return results
+```
+
+## 📊 Monitoring and Debugging
+
+### Enable Debug Mode
 
 ```bash
-# 1. Clone and setup
-git clone <repo>
-cd CriticalAlertAI
+# Set environment variables for debugging
+export PW_DEBUG_UPDATE_STREAM=1
+export PATHWAY_LOGGING_LEVEL=DEBUG
+export PW_MONITORING_LEVEL=DEBUG
 
-# 2. Install dependencies
-pip install pathway[all] landingai python-dotenv pydantic
-
-# 3. Set environment variables
-export LANDINGAI_API_KEY="your_landingai_key"
-export OPENAI_API_KEY="your_openai_key"
-
-# 4. Create data directories
-mkdir -p data/incoming data/processed data/alerts
-
-# 5. Run the application (just like other Pathway apps)
 python app.py
-
-# 6. Add radiology report PDFs to data/incoming/
-# 7. Watch real-time critical alerts in console output
 ```
 
-### **📊 Real-time Processing Output:**
+### Performance Monitoring
 
-When you run the app, you'll see real-time streams:
+The system provides real-time metrics:
 
-```
-INFO Starting CriticalAlert AI server on 0.0.0.0:8000
-INFO Starting Pathway computation engine...
+- Document processing rate
+- Parse success/failure rates
+- Query response times
+- Critical alert frequencies
 
-# Real-time critical alerts stream
-critical_alerts_stream: 
-+---+------------------------+-------------+-------------------+
-|id |filename                |alert_level  |critical_conditions|
-+---+------------------------+-------------+-------------------+
-|1  |chest_ct_001.pdf        |RED          |[pulmonary embolism]|
-|2  |brain_mri_002.pdf       |ORANGE       |[mass lesion]      |
+## Contributing
 
-# Immediate action alerts (RED level only)
-immediate_action_alerts:
-+---+------------------------+-------------------------+
-|id |findings_summary        |time_to_treatment_minutes|
-+---+------------------------+-------------------------+  
-|1  |🚨 CRITICAL: PULMONARY  |30                       |
-   |EMBOLISM - Immediate     |                         |
-   |intervention required    |                         |
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-# Processing statistics
-processing_statistics:
-+---+----------------+------------+------------------+
-|id |total_documents |red_alerts  |avg_processing_time|
-+---+----------------+------------+------------------+
-|1  |15              |2           |18.3              |
-```
+## License
 
-### **🔄 Comparison with Existing Pathway Apps:**
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-| **Existing App** | **CriticalAlert AI** | **Key Difference** |
-|------------------|----------------------|-------------------|
-| `demo-question-answering` | Same structure | Medical-specialized parser |
-| `DoclingParser` | `LandingAIRadiologyParser` | Radiology-specific extraction |
-| `BaseRAGQuestionAnswerer` | `CriticalAlertQuestionAnswerer` | Medical intelligence |
-| `DocumentStore` | `RadiologyDocumentStore` | Critical alert detection |
+## Support
 
-### **📝 Environment Variables:**
+For issues and questions or some bug in my code, please raise a ticket in Github Issues I would love to chat with you.
 
-Create `.env` file with:
+## Deployment
+
+### Production Deployment
+
 ```bash
-# Required
-LANDINGAI_API_KEY=your_landingai_api_key
-OPENAI_API_KEY=your_openai_api_key
+# 1. Set production environment variables
+export ENVIRONMENT=production
+export HOST=0.0.0.0
+export PORT=80
 
-# Optional  
-PATHWAY_LICENSE_KEY=your_pathway_license_key
-TWILIO_ACCOUNT_SID=your_twilio_sid
-FIREBASE_SERVER_KEY=your_firebase_key
+# 2. Use production-grade WSGI server
+pip install gunicorn
+gunicorn app:app --bind 0.0.0.0:80
+
+# 3. Set up reverse proxy (nginx recommended)
+# 4. Configure SSL certificates
+# 5. Set up monitoring and logging
 ```
 
-### **🎯 Key Advantages:**
+### Docker Deployment
 
-1. **🔄 Drop-in Replacement**: Replace `DoclingParser` with `LandingAIRadiologyParser`
-2. **📋 Same Patterns**: Uses exact same YAML configuration approach
-3. **⚡ Real-time Processing**: Streams incoming radiology reports
-4. **🧠 Medical Intelligence**: Built-in critical finding detection
-5. **🚨 Emergency Alerts**: RED/ORANGE/YELLOW alert classification
-6. **💾 Caching Support**: Full Pathway caching integration
-7. **📊 Real-time Stats**: Live processing and alert metrics
+```dockerfile
+FROM python:3.11-slim
 
-### **🏥 Medical Use Case:**
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-- **📄 Input**: Radiology report PDFs (CT, MRI, X-ray reports)
-- **⚡ Processing**: 30-second parsing with LandingAI
-- **🧠 Intelligence**: Critical finding detection (PE, hemorrhage, fractures)
-- **🚨 Alerts**: Instant notifications to emergency physicians
-- **📈 Impact**: Reduce response time from 45 minutes to 45 seconds
+COPY . .
+EXPOSE 49001
 
-This follows the **exact same patterns** as existing Pathway applications while providing **life-saving medical intelligence** for emergency radiology! 🚨
+CMD ["python", "app.py"]
+```
 
+---
+
+**Built with ❤️ using [Pathway](https://pathway.com) and [LandingAI](https://landing.ai)**

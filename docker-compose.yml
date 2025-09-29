@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  radiology-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REST_PORT: ${REST_PORT:-49001}
+        MCP_PORT: ${MCP_PORT:-8123}
+    container_name: radiology-ai-app
+    ports:
+      - "${REST_PORT:-49001}:${REST_PORT:-49001}"
+      - "${MCP_PORT:-8123}:${MCP_PORT:-8123}"
+    networks:
+      - radiology-network
+
+    volumes:
+      - ./data:/app/data
+      - ./Cache:/app/Cache
+      - ./data/extraction_results:/app/data/extraction_results
+      
+      # Configuration
+      - ./app.yaml:/app/app.yaml:ro
+      
+      # Optional: Mount custom documents during development
+      # - ./custom_documents:/app/data/incoming
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:${REST_PORT:-49001}/v1/statistics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - init-volumes
+
+  # Helper service to initialize required directories
+  init-volumes:
+    image: alpine:latest
+    container_name: radiology-ai-init
+    command: |
+      sh -c "
+        mkdir -p /app/data/incoming /app/data/processed /app/data/extraction_results /app/Cache &&
+        chmod -R 755 /app/data /app/Cache &&
+        echo 'Directories initialized successfully'
+      "
+    volumes:
+      - ./data:/app/data
+      - ./Cache:/app/Cache
+
+networks:
+  radiology-network:
+    driver: bridge
+    name: radiology-ai-network
+
+volumes:
+  # Optional: Use named volumes for persistence
+  radiology-data:
+    driver: local
+  radiology-cache:
+    driver: local
