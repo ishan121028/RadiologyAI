@@ -37,8 +37,14 @@ cd RadiologyAI
 python -m venv .venv
 source .venv/bin/activate 
 
-# 3. Install dependencies
-pip install requirements.txt
+# Install LandingAI
+pip install agentic-doc
+
+# Install pathway
+pip install pathway
+
+# Install pathway xpacks and related module
+pip install pathway[xpack-llm] pathway[xpack-llm-local]
 
 # 4. Set up environment variables
 cp .env.example .env
@@ -105,8 +111,8 @@ python app.py
 
 ### Patient-Specific Endpoints
 
-- **POST** `/v1/search_patient_by_id` - Search by patient ID
-- **POST** `/v1/query_patient_extraction` - Query patient extraction data
+- **POST** `/v3/search_patient_by_id` - Search by patient ID
+- **POST** `/v3/query_patient_extraction` - Query patient extraction data
 
 ### Example API Calls
 
@@ -130,6 +136,8 @@ curl -X POST "http://localhost:49001/v1/search_patient_by_id" \
 curl -X POST "http://localhost:49001/v2/answer" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "What are the critical findings in recent MRI scans?"}'
+
+# Search on the basis of patient ID
 ```
 
 ## 🔧 Configuration
@@ -206,7 +214,7 @@ The system exposes tools via MCP for external access:
 - query_patient_extraction: Patient data extraction
 ```
 
-Access MCP server at: `http://localhost:49001/mcp/`
+Access MCP server at: `http://localhost:8123/mcp/`
 
 ## 🛠️ Development
 
@@ -277,26 +285,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 For issues and questions or some bug in my code, please raise a ticket in Github Issues I would love to chat with you.
 
-## Deployment
-
-### Production Deployment
-
-```bash
-# 1. Set production environment variables
-export ENVIRONMENT=production
-export HOST=0.0.0.0
-export PORT=80
-
-# 2. Use production-grade WSGI server
-pip install gunicorn
-gunicorn app:app --bind 0.0.0.0:80
-
-# 3. Set up reverse proxy (nginx recommended)
-# 4. Configure SSL certificates
-# 5. Set up monitoring and logging
-```
-
-### Docker Deployment
+## Docker Deployment
 
 ```dockerfile
 FROM python:3.11-slim
@@ -314,3 +303,4 @@ CMD ["python", "app.py"]
 ---
 
 **Built with ❤️ using [Pathway](https://pathway.com) and [LandingAI](https://landing.ai)**
+
