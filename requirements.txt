@@ -1,9 +1,12 @@
 # Core dependencies  
-pathway==0.26.1
+pathway==0.26.2
 sentence-transformers
+pathway[xpack-llm]
+pathway[xpack-llm-local]
 agentic-doc==0.3.3
 python-dotenv
 pydantic
 litellm
 openai
 pytest
+
