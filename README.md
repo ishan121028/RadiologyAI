@@ -288,16 +288,7 @@ For issues and questions or some bug in my code, please raise a ticket in Github
 ## Docker Deployment
 
 ```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 49001
-
-CMD ["python", "app.py"]
+docker-compose up --build
 ```
 
 ---
